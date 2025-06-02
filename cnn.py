@@ -19,30 +19,52 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 class NeuralNetwork(nn.Module):
     def __init__(self):
         super().__init__()
-        self.flatten = nn.Flatten()
-        self.first_layer = nn.Linear(100*100*3, 1024)
-        self.bn1 = nn.BatchNorm1d(1024)
-        self.dropout1 = nn.Dropout(0.4)
+        self.conv1 = nn.Conv2d(3, 32, kernel_size=3, padding=1)
+        self.bn1 = nn.BatchNorm2d(32)
+        self.pool1 = nn.MaxPool2d(2)
+        self.dropout1 = nn.Dropout(0.1)
 
-        self.second_layer = nn.Linear(1024, 1024)
-        self.bn2 = nn.BatchNorm1d(1024)
-        self.dropout2 = nn.Dropout(0.4)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, padding=1)
+        self.bn2 = nn.BatchNorm2d(64)
+        self.pool2 = nn.MaxPool2d(2)
+        self.dropout2 = nn.Dropout(0.1)
 
-        self.third_layer = nn.Linear(1024, 512)
-        self.bn3 = nn.BatchNorm1d(512)
-        self.dropout3 = nn.Dropout(0.4)
+        self.conv3 = nn.Conv2d(64, 128, kernel_size=3, padding=1)
+        self.bn3 = nn.BatchNorm2d(128)
+        self.pool3 = nn.MaxPool2d(2)
+        self.dropout3 = nn.Dropout(0.1)
 
-        self.output_layer = nn.Linear(512, 5)
+        self.conv4 = nn.Conv2d(128, 256, kernel_size=3, padding=1)
+        self.bn4 = nn.BatchNorm2d(256)
+        self.pool4 = nn.AdaptiveAvgPool2d((4, 4))
+        self.dropout4 = nn.Dropout(0.1)
+
+        self.fc1 = nn.Linear(256 * 4 * 4, 512)
+        self.bn_fc = nn.BatchNorm1d(512)
+        self.dropout_fc = nn.Dropout(0.5)
+        self.output = nn.Linear(512, 5)
 
     def forward(self, x):
-        x = self.flatten(x)
-        x = F.relu(self.bn1(self.first_layer(x)))
+        x = F.relu(self.bn1(self.conv1(x)))
+        x = self.pool1(x)
         x = self.dropout1(x)
-        x = F.relu(self.bn2(self.second_layer(x)))
+
+        x = F.relu(self.bn2(self.conv2(x)))
+        x = self.pool2(x)
         x = self.dropout2(x)
-        x = F.relu(self.bn3(self.third_layer(x)))
+
+        x = F.relu(self.bn3(self.conv3(x)))
+        x = self.pool3(x)
         x = self.dropout3(x)
-        return self.output_layer(x)
+
+        x = F.relu(self.bn4(self.conv4(x)))
+        x = self.pool4(x)
+        x = self.dropout4(x)
+
+        x = torch.flatten(x, 1)
+        x = F.relu(self.bn_fc(self.fc1(x)))
+        x = self.dropout_fc(x)
+        return self.output(x)
 
 
 class ImageDataset(Dataset):
@@ -67,10 +89,12 @@ class ImageDataset(Dataset):
 
 
 train_transform = transforms.Compose([
-    transforms.RandomResizedCrop(100, scale=(0.8, 1.2)),
+    transforms.RandomResizedCrop(100, scale=(0.4, 1.0)),
+    transforms.RandomAffine(degrees=15, translate=(0.3, 0.3)),
     transforms.RandomHorizontalFlip(p=0.5),
     transforms.ToTensor()
 ])
+
 
 test_val_transform = transforms.Compose([
     transforms.Resize((100, 100)),
@@ -87,14 +111,14 @@ test_loader = DataLoader(test_data, batch_size=BATCH_SIZE)
 
 model = NeuralNetwork().to(DEVICE)
 loss_function = nn.CrossEntropyLoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=LR)
+optimizer = torch.optim.Adam(model.parameters(), lr=LR, weight_decay=1e-4)
 scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3)
 
 start = time.time()
 
 best_val_loss = float('inf')
 epochs_no_improve = 0
-early_stop_patience = 5
+early_stop_patience = 7
 for epoch in range(NUM_EPOCHS):
     print(f"\n=== Epoch {epoch + 1} ===")
     model.train()
@@ -137,10 +161,10 @@ for epoch in range(NUM_EPOCHS):
     if avg_val_loss < best_val_loss:
         best_val_loss = avg_val_loss
         epochs_no_improve = 0
-        torch.save(model.state_dict(), "best_mlp_model.pth")
+        torch.save(model.state_dict(), "best_cnn_model.pth")
     else:
         epochs_no_improve += 1
-        print(f"No improvement for {epochs_no_improve} epochs.")
+        print(f"No improvement for {epochs_no_improve} epochs")
         if epochs_no_improve >= early_stop_patience:
             print(f"Early stopping triggered at epoch {epoch+1}")
             break
@@ -152,7 +176,7 @@ disp.plot(cmap=plt.cm.Blues)
 plt.title("Confusion Matrix - Validation Set")
 plt.savefig("confusion_matrix_validation.png")
 
-model.load_state_dict(torch.load("best_mlp_model.pth"))
+model.load_state_dict(torch.load("best_cnn_model.pth"))
 model.eval()
 predictions = []
 with torch.no_grad():
