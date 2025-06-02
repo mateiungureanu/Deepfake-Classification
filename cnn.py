@@ -89,8 +89,7 @@ class ImageDataset(Dataset):
 
 
 train_transform = transforms.Compose([
-    transforms.RandomResizedCrop(100, scale=(0.4, 1.0)),
-    transforms.RandomAffine(degrees=15, translate=(0.3, 0.3)),
+    transforms.RandomResizedCrop(100, scale=(0.8, 1.2)),
     transforms.RandomHorizontalFlip(p=0.5),
     transforms.ToTensor()
 ])
