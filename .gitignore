@@ -2,3 +2,8 @@
 test/
 train/
 validation/
+sample_submission.csv
+submission.csv
+test.csv
+train.csv
+validation.csv
